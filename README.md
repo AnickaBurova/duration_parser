@@ -7,7 +7,7 @@
 ```Elixir
 def deps do
     [
-        {:duration_parser, github: "https://github.com/AnickaBurova/duration_parser"}
+        {:duration_parser, github: "AnickaBurova/duration_parser"}
     ]
 end
 ```
