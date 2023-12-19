@@ -6,8 +6,25 @@ defmodule DurationParser do
 
   @spec duration([{:microseconds, Integer.t() | Float.t()} | {:microsecond, Integer.t() | Float.t()} | {:milliseconds, Integer.t() | Float.t()} | {:millisecond, Integer.t() | Float.t()} | {:seconds, Integer.t() | Float.t()} | {:second, Integer.t() | Float.t()} | {:minutes, Integer.t() | Float.t()} | {:hours, Integer.t() | Float.t()} | {:days, Integer.t() | Float.t()} | {:weeks, Integer.t() | Float.t()}]) :: Timex.Duration.t()
 
-  def duration(chunks) do
+  @doc """
+    Converts a keyword list of individual durations into a single `Timex.Duration.t()` by adding them together.
+    Each keyword in the list consists of a time unit key and its corresponding value.
+    In case of any invalid input, this will raise an error.
+  """
+  def duration!(chunks) do
     create_duration(Timex.Duration.zero(), chunks)
+  end
+
+  @doc """
+    Similar to `duration!/1`, but instead of raising an error for invalid inputs, this function returns `{:error, term()}`.
+  """
+  def duration(chunks) do
+    try do
+      {:ok, duration!(chunks)}
+    rescue
+      error ->
+        {:error, error}
+    end
   end
 
   defp create_duration(duration, []) do
@@ -95,17 +112,54 @@ defmodule DurationParser do
     create_duration(duration, [{:w, x} | tail])
   end
 
+  defp create_duration(_, _) do
+    raise "Invalid input"
+  end
 
 
   #  @spec parse(string()) :: Timex.Duration.t()
-
-  def parse(input) do
-    regex = ~r/(\d+)\s*(milliseconds|millisecond|ms|seconds|second|secs|s|minutes|minute|mins|min|m|hours|hour|hrs|h|days|day|d|weeks|week|wks|wk|w)(?=\s|\z)/
-    Regex.scan(regex, input)  |> Enum.map( fn [_, v, u] -> {val, ""} = Float.parse(v);{convert_to_atom_form(u), val} end)
-    |> duration()
+  @value_unit ~r/(\d+)\s*(milliseconds|millisecond|ms|seconds|second|secs|s|minutes|minute|mins|min|m|hours|hour|hrs|h|days|day|d|weeks|week|wks|wk|w)(?=\s|\z)/
+  @doc """
+    Parses a string to extract duration values, sums them into a single duration, and returns the computed `Timex.Duration.t()`.
+    The input string can have various duration units including partial unit names like 'min' for minutes, written in any combination of lowercase or uppercase.
+    It ignores any non-duration text present in the input string.
+  """
+  def extract_duration(input) do
+      Regex.scan(@value_unit, input)
+      |> Enum.map( fn [_, v, u] -> {val, ""} = Float.parse(v);{convert_to_atom_form(u), val} end)
+      |> duration!()
   end
 
-  def convert_to_atom_form(time_unit_string) do
+  @value_unit_with_error ~r/(?:(?:(\d+)\s*(milliseconds|millisecond|ms|seconds|second|secs|s|minutes|minute|mins|min|m|hours|hour|hrs|h|days|day|d|weeks|week|wks|wk|w))|(\w+))/
+
+  @doc """
+    Parse the input string if the text only contains valid durations (value unit). If there is a text which does not parse in to a duration, error is returned.
+"""
+  def parse(input)do
+    try do
+      {:ok, parse!(input)}
+    rescue
+      error ->
+        {:error, error}
+    end
+  end
+
+  @doc """
+    Same as parse/1, but returns the duration on success, or raises an exception on any failed parsing.
+"""
+  def parse!(input) do
+    Regex.scan(@value_unit_with_error, input)
+    |> Enum.map( fn match -> case match do
+       [_, v, u] ->
+          {val, ""} = Float.parse(v)
+          {convert_to_atom_form(u), val}
+       [text | _] ->
+         raise "Invalid input #{text}"
+    end end)
+    |> duration!()
+  end
+
+  defp convert_to_atom_form(time_unit_string) do
     case time_unit_string do
       "milliseconds" -> :millisecond
       "millisecond" -> :millisecond
